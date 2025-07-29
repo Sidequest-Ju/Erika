@@ -129,7 +129,7 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 	var cmd *exec.Cmd
 	var stdout io.ReadCloser
 	var reader *bufio.Reader
-	var buffer []int16
+	var buffer []byte
 	var sendChan chan []int16
 
 	vc.Speaking(true)
@@ -159,23 +159,26 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 	}
 
 	reader = bufio.NewReader(stdout)
-	buffer = make([]int16, 960*2) // 20ms of stereo audio at 48kHz
-	sendChan = make(chan []int16, 2)
+	buffer = make([]byte, 2*960*2) // 2 channels * 960 samples * 2 bytes per sample
+	sendChan = make(chan []int16, 16)
 
 	go dgvoice.SendPCM(vc, sendChan)
 
 	for {
-		for i := range buffer {
-			var sample int16
+		var frame []int16
+		var i int
 
-			if err = binary.Read(reader, binary.LittleEndian, &sample); err != nil {
-				err = fmt.Errorf("Finished reading: %w", err)
-				return
-			}
-
-			buffer[i] = sample
+		if _, err = io.ReadFull(reader, buffer); err != nil {
+			close(sendChan)
+			return
 		}
 
-		sendChan <- buffer
+		frame = make([]int16, 2*960)
+
+		for i = 0; i < len(frame); i++ {
+			frame[i] = int16(binary.LittleEndian.Uint16(buffer[i*2:]))
+		}
+
+		sendChan <- frame
 	}
 }
