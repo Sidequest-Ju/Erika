@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -15,11 +14,18 @@ import (
 	"go.uber.org/zap"
 )
 
-const RADIO_FLAMINGO string = "https://live.radioflamingo.at/rf"
-const RADIO_BOLLERWAGEN string = "http://player.ffn.de/radiobollerwagen.mp3"
+const (
+	RADIO_FLAMINGO    string = "https://live.radioflamingo.at/rf"
+	RADIO_BOLLERWAGEN string = "http://player.ffn.de/radiobollerwagen.mp3"
+	CHANNELS          int    = 2
+	FRAME_SIZE        int    = 960                       // Discord requires 20ms of audio = 960 samples @ 48kHz
+	BYTE_SIZE         int    = FRAME_SIZE * CHANNELS * 2 // total bytes needed (2 bytes per int16)
+)
 
-var logger *zap.SugaredLogger
-var voiceConns = make(map[string]*discordgo.VoiceConnection)
+var (
+	logger     *zap.SugaredLogger
+	voiceConns = make(map[string]*discordgo.VoiceConnection)
+)
 
 func main() {
 	var err error
@@ -128,7 +134,6 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 	var ffmpegArgs []string
 	var cmd *exec.Cmd
 	var stdout io.ReadCloser
-	var reader *bufio.Reader
 	var buffer []byte
 	var sendChan chan []int16
 
@@ -158,9 +163,8 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 		return
 	}
 
-	reader = bufio.NewReader(stdout)
-	buffer = make([]byte, 2*960*2) // 2 channels * 960 samples * 2 bytes per sample
-	sendChan = make(chan []int16, 16)
+	buffer = make([]byte, BYTE_SIZE) // 2 channels * 960 samples * 2 bytes per sample
+	sendChan = make(chan []int16)
 
 	go dgvoice.SendPCM(vc, sendChan)
 
@@ -168,12 +172,12 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 		var frame []int16
 		var i int
 
-		if _, err = io.ReadFull(reader, buffer); err != nil {
+		if _, err = io.ReadFull(stdout, buffer); err != nil {
 			close(sendChan)
 			return
 		}
 
-		frame = make([]int16, 2*960)
+		frame = make([]int16, CHANNELS*FRAME_SIZE)
 
 		for i = 0; i < len(frame); i++ {
 			frame[i] = int16(binary.LittleEndian.Uint16(buffer[i*2:]))
