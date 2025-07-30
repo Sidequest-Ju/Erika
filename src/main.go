@@ -179,7 +179,7 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 
 		frame = make([]int16, CHANNELS*FRAME_SIZE)
 
-		for i = 0; i < CHANNELS*FRAME_SIZE; i++ {
+		for i = range CHANNELS * FRAME_SIZE {
 			j = i * 2
 			frame[i] = int16(buffer[j]) | int16(buffer[j+1])<<8
 		}
