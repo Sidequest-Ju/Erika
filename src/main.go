@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -171,6 +170,7 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 	for {
 		var frame []int16
 		var i int
+		var j int
 
 		if _, err = io.ReadFull(stdout, buffer); err != nil {
 			close(sendChan)
@@ -179,8 +179,9 @@ func streamAudio(vc *discordgo.VoiceConnection, streamUrl string) (err error) {
 
 		frame = make([]int16, CHANNELS*FRAME_SIZE)
 
-		for i = 0; i < len(frame); i++ {
-			frame[i] = int16(binary.LittleEndian.Uint16(buffer[i*2:]))
+		for i = 0; i < CHANNELS*FRAME_SIZE; i++ {
+			j = i * 2
+			frame[i] = int16(buffer[j]) | int16(buffer[j+1])<<8
 		}
 
 		sendChan <- frame
